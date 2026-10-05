@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#173f5f">
+<title>Contagem de Chope</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f3f3f3;font-family:Arial,sans-serif;color:#222}
+header{background:#173f5f;color:#fff;padding:16px 12px 12px;position:sticky;top:0;z-index:10}
+h1{font-size:21px;margin:0 0 11px}
+.tabs{display:flex;gap:7px}
+.tab{flex:1;border:0;border-radius:10px;padding:12px 8px;font-size:16px;font-weight:bold;background:#fff;color:#173f5f}
+.tab.active{background:#f3c969}
+main{padding:10px 9px 85px;max-width:720px;margin:auto}
+.section{display:none}.section.active{display:block}
+.topbar{display:flex;gap:7px;margin:4px 0 10px}
+.topbar button,.modal button{border:0;border-radius:10px;padding:11px 13px;font-weight:bold;font-size:15px}
+.add{background:#173f5f;color:#fff;flex:1}
+.manage{background:#ddd;color:#222}
+.card{background:#fff;border-radius:12px;margin:8px 0;padding:11px;box-shadow:0 1px 4px #0002}
+.cardhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.name{font-size:17px;font-weight:bold;overflow:hidden;text-overflow:ellipsis}
+.edit{border:0;background:#eee;border-radius:8px;padding:8px 10px;font-size:14px}
+.fields{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.field label{display:block;font-size:12px;color:#666;text-align:center;margin-bottom:4px}
+input{width:100%;height:48px;border:2px solid #ddd;border-radius:10px;text-align:center;font-size:21px;font-weight:bold;background:#fff}
+input:focus{border-color:#173f5f;outline:none}
+.total{margin-top:8px;text-align:right;color:#555;font-size:14px}
+.total strong{font-size:16px;color:#173f5f}
+.latas .card{display:flex;align-items:center;gap:9px}
+.latas .name{flex:1;margin:0}
+.latas .card input{width:105px}
+.empty{text-align:center;color:#777;padding:25px 10px}
+.actions{position:fixed;bottom:0;left:0;right:0;background:#fff;padding:9px;border-top:1px solid #ddd;display:flex;gap:7px;justify-content:center;z-index:10}
+.action{border:0;border-radius:10px;padding:11px 14px;font-size:14px;font-weight:bold;background:#173f5f;color:#fff}
+.clear{background:#ddd;color:#222}
+.note{text-align:center;color:#777;font-size:12px;margin:12px}
+.modalbg{display:none;position:fixed;inset:0;background:#0008;z-index:30;align-items:flex-end;justify-content:center}
+.modalbg.show{display:flex}
+.modal{background:#fff;width:100%;max-width:720px;border-radius:18px 18px 0 0;padding:18px}
+.modal h2{margin:0 0 12px;font-size:19px}
+.modal input{height:50px;text-align:left;padding:0 12px;font-size:17px;margin-bottom:10px}
+.modalrow{display:flex;gap:8px}
+.modalrow button{flex:1}
+.save{background:#173f5f;color:#fff}
+.cancel{background:#ddd}
+.delete{background:#c0392b;color:#fff}
+</style>
+</head>
+<body>
+<header>
+<h1>🍺 Contagem de Estoque</h1>
+<div class="tabs">
+<button class="tab active" data-tab="barris">🍺 Barris</button>
+<button class="tab" data-tab="latas">🥫 Latas</button>
+</div>
+</header>
+
+<main>
+<section id="barris" class="section active"></section>
+<section id="latas" class="section latas"></section>
+<p class="note">As quantidades e os estilos ficam salvos automaticamente neste celular.</p>
+</main>
+
+<div class="actions">
+<button class="action" id="printBtn">Imprimir</button>
+<button class="action clear" id="clearBtn">Limpar contagem</button>
+</div>
+
+<div class="modalbg" id="modalBg">
+<div class="modal">
+<h2 id="modalTitle">Adicionar estilo</h2>
+<input id="styleName" type="text" placeholder="Nome do estilo">
+<div id="moveControls" style="display:none;margin-bottom:10px">
+<div style="font-size:13px;color:#666;margin-bottom:6px">Posição na lista</div>
+<div class="modalrow"><button class="manage" id="upBtn">▲ Mover para cima</button><button class="manage" id="downBtn">▼ Mover para baixo</button></div>
+</div>
+<div class="modalrow">
+<button class="cancel" id="cancelBtn">Cancelar</button>
+<button class="delete" id="deleteBtn" style="display:none">Excluir</button>
+<button class="save" id="saveBtn">Salvar</button>
+</div>
+</div>
+</div>
+
+<script>
+const defaultBarris=["Pilsen","Wheat Beer","Hop Lager","Tangerina","Caju","Session IPA","Mango APA","West IPA","Double IPA","Black IPA","Stout","Bourbon Red","Light Lager","Coffee IPA","Reis IPA","Sour Frutas Amarelas","Sour Frutas Vermelhas"];
+const defaultLatas=["Pilsen","Vich","Sour Frutas Amarelas","Sour Frutas Vermelhas","Hop Lager","Mango APA","Session IPA","West IPA","Double IPA","Red Ale"];
+
+function getStyles(type){
+  const key=type==="barris"?"styles_barris":"styles_latas";
+  const raw=localStorage.getItem(key);
+  if(raw!==null){try{return JSON.parse(raw)}catch(e){}}
+  return type==="barris"?[...defaultBarris]:[...defaultLatas];
+}
+function saveStyles(type,arr){
+  localStorage.setItem(type==="barris"?"styles_barris":"styles_latas",JSON.stringify(arr));
+}
+let currentTab="barris";
+let editing={type:null,index:null};
+
+function qtyKey(type,index,size=""){
+  return "qty_"+type+"_"+index+"_"+size;
+}
+function getQty(key){return localStorage.getItem(key)||""}
+function setQty(key,value){localStorage.setItem(key,value)}
+
+function render(type){
+  const el=document.getElementById(type);
+  const styles=getStyles(type);
+  let html=`<div class="topbar">
+    <button class="add" data-action="add" data-type="${type}">＋ Adicionar estilo</button>
+  </div>`;
+  if(!styles.length) html+=`<div class="empty">Nenhum estilo cadastrado.<br>Toque em “Adicionar estilo”.</div>`;
+  styles.forEach((name,i)=>{
+    if(type==="barris"){
+      const q20=getQty(qtyKey(type,i,"20"));
+      const q30=getQty(qtyKey(type,i,"30"));
+      const q50=getQty(qtyKey(type,i,"50"));
+      const liters=(Number(q20)||0)*20+(Number(q30)||0)*30+(Number(q50)||0)*50;
+      html+=`<div class="card">
+        <div class="cardhead"><div class="name">${esc(name)}</div><button class="edit" data-action="edit" data-type="${type}" data-index="${i}">✎ Editar</button></div>
+        <div class="fields">
+          <div class="field"><label>20 L</label><input inputmode="numeric" type="number" min="0" data-type="${type}" data-index="${i}" data-size="20" value="${q20}"></div>
+          <div class="field"><label>30 L</label><input inputmode="numeric" type="number" min="0" data-type="${type}" data-index="${i}" data-size="30" value="${q30}"></div>
+          <div class="field"><label>50 L</label><input inputmode="numeric" type="number" min="0" data-type="${type}" data-index="${i}" data-size="50" value="${q50}"></div>
+        </div>
+        <div class="total">Litragem total: <strong id="total_${type}_${i}">${liters} L</strong></div>
+      </div>`;
+    }else{
+      const q=getQty(qtyKey(type,i));
+      html+=`<div class="card">
+        <div class="name">${esc(name)}</div>
+        <input inputmode="numeric" type="number" min="0" data-type="${type}" data-index="${i}" value="${q}">
+        <button class="edit" data-action="edit" data-type="${type}" data-index="${i}">✎ Editar</button>
+      </div>`;
+    }
+  });
+  el.innerHTML=html;
+}
+
+function esc(s){
+  return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+}
+
+function updateBarrelTotal(i){
+  const a=Number(document.querySelector(`[data-type="barris"][data-index="${i}"][data-size="20"]`)?.value||0);
+  const b=Number(document.querySelector(`[data-type="barris"][data-index="${i}"][data-size="30"]`)?.value||0);
+  const c=Number(document.querySelector(`[data-type="barris"][data-index="${i}"][data-size="50"]`)?.value||0);
+  const out=document.getElementById(`total_barris_${i}`);
+  if(out) out.textContent=(a*20+b*30+c*50)+" L";
+}
+
+function showTab(type){
+  currentTab=type;
+  document.querySelectorAll(".section").forEach(x=>x.classList.remove("active"));
+  document.getElementById(type).classList.add("active");
+  document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===type));
+  window.scrollTo(0,0);
+}
+
+function openModal(type,index=null){
+  editing={type,index};
+  document.getElementById("modalTitle").textContent=index===null?"Adicionar estilo":"Editar estilo";
+  document.getElementById("styleName").value=index===null?"":getStyles(type)[index];
+  document.getElementById("deleteBtn").style.display=index===null?"none":"block";
+  document.getElementById("moveControls").style.display=index===null?"none":"block";
+  document.getElementById("modalBg").classList.add("show");
+  setTimeout(()=>document.getElementById("styleName").focus(),100);
+}
+function closeModal(){
+  document.getElementById("modalBg").classList.remove("show");
+  editing={type:null,index:null};
+}
+function saveStyle(){
+  const name=document.getElementById("styleName").value.trim();
+  if(!name){alert("Digite o nome do estilo.");return}
+  const {type,index}=editing;
+  const styles=getStyles(type);
+  if(index===null){
+    styles.push(name);
+    saveStyles(type,styles);
+  }else{
+    const oldIndex=index;
+    const oldName=styles[oldIndex];
+    styles[oldIndex]=name;
+    saveStyles(type,styles);
+    // Ao editar o nome, a posição e as quantidades são preservadas.
+    if(oldName!==name){}
+  }
+  closeModal(); render(type);
+}
+function moveStyle(direction){
+  const {type,index}=editing;
+  if(index===null)return;
+  const styles=getStyles(type);
+  const target=direction==="up"?index-1:index+1;
+  if(target<0 || target>=styles.length)return;
+  [styles[index],styles[target]]=[styles[target],styles[index]];
+  saveStyles(type,styles);
+
+  const prefix="qty_"+type+"_";
+  if(type==="barris"){
+    for(const size of ["20","30","50"]){
+      const a=getQty(prefix+index+"_"+size), b=getQty(prefix+target+"_"+size);
+      localStorage.setItem(prefix+index+"_"+size,b);
+      localStorage.setItem(prefix+target+"_"+size,a);
+    }
+  }else{
+    const a=getQty(prefix+index), b=getQty(prefix+target);
+    localStorage.setItem(prefix+index,b);
+    localStorage.setItem(prefix+target,a);
+  }
+
+  editing.index=target;
+  document.getElementById("styleName").value=styles[target];
+  render(type);
+}
+
+function deleteStyle(){
+  const {type,index}=editing;
+  const styles=getStyles(type);
+  if(index===null)return;
+  if(!confirm(`Excluir "${styles[index]}"?`))return;
+  styles.splice(index,1);
+  saveStyles(type,styles);
+  // Reorganiza as quantidades para acompanhar a lista após exclusão.
+  const prefix="qty_"+type+"_";
+  const values=[];
+  if(type==="barris"){
+    for(let i=0;i<styles.length+1;i++){
+      values.push({a:getQty(prefix+i+"_20"),b:getQty(prefix+i+"_30"),c:getQty(prefix+i+"_50")});
+    }
+    for(let i=0;i<styles.length+1;i++){
+      ["20","30","50"].forEach(s=>localStorage.removeItem(prefix+i+"_"+s));
+    }
+    let newIndex=0;
+    for(let old=0;old<values.length;old++){
+      if(old===index)continue;
+      localStorage.setItem(prefix+newIndex+"_20",values[old].a);
+      localStorage.setItem(prefix+newIndex+"_30",values[old].b);
+      localStorage.setItem(prefix+newIndex+"_50",values[old].c);
+      newIndex++;
+    }
+  }else{
+    const values=[];
+    for(let i=0;i<styles.length+1;i++)values.push(getQty(prefix+i));
+    for(let i=0;i<values.length;i++)localStorage.removeItem(prefix+i);
+    let newIndex=0;
+    for(let old=0;old<values.length;old++){
+      if(old===index)continue;
+      localStorage.setItem(prefix+newIndex,values[old]);
+      newIndex++;
+    }
+  }
+  closeModal(); render(type);
+}
+
+document.addEventListener("click",e=>{
+  const tab=e.target.closest(".tab");
+  if(tab){showTab(tab.dataset.tab);return}
+  const btn=e.target.closest("[data-action]");
+  if(btn){
+    if(btn.dataset.action==="add")openModal(btn.dataset.type);
+    if(btn.dataset.action==="edit")openModal(btn.dataset.type,Number(btn.dataset.index));
+    return;
+  }
+});
+document.addEventListener("input",e=>{
+  if(e.target.matches("input[data-type]")){
+    const t=e.target.dataset.type,i=e.target.dataset.index,s=e.target.dataset.size||"";
+    setQty(qtyKey(t,i,s),e.target.value);
+    if(t==="barris")updateBarrelTotal(i);
+  }
+});
+document.getElementById("saveBtn").onclick=saveStyle;
+document.getElementById("upBtn").onclick=()=>moveStyle("up");
+document.getElementById("downBtn").onclick=()=>moveStyle("down");
+document.getElementById("deleteBtn").onclick=deleteStyle;
+document.getElementById("cancelBtn").onclick=closeModal;
+document.getElementById("modalBg").addEventListener("click",e=>{if(e.target.id==="modalBg")closeModal()});
+document.getElementById("printBtn").onclick=()=>window.print();
+document.getElementById("clearBtn").onclick=()=>{
+  if(confirm("Apagar todas as quantidades? Os estilos serão mantidos.")){
+    Object.keys(localStorage).filter(k=>k.startsWith("qty_")).forEach(k=>localStorage.removeItem(k));
+    render("barris");render("latas");
+  }
+};
+document.getElementById("styleName").addEventListener("keydown",e=>{if(e.key==="Enter")saveStyle()});
+
+render("barris");render("latas");
+</script>
+</body>
+</html>
